@@ -25,15 +25,15 @@ to the assumptions that actually hold on this data.
 
 110,101 interactions, 267 learners, 102 skills. Mean ± standard deviation over 5 folds.
 
-| Model | Family | AUC ↑ | Log-loss ↓ | ECE ↓ |
+| Model | Family | AUC ↑ | RMSE ↓ | Log-loss ↓ |
 |---|---|---|---|---|
-| **Optimized PFA** | logistic, temporal | **0.789 ± 0.006** | **0.467** | 0.016 |
-| BKT | probabilistic | 0.786 ± 0.007 | 0.637 | 0.148 |
-| PFA | logistic | 0.784 ± 0.006 | 0.471 | **0.014** |
-| GIRT | graph + IRT | 0.780 ± 0.006 | 0.484 | 0.024 |
-| Dynamic IRT | psychometric, dynamic | 0.740 ± 0.003 | 0.586 | 0.073 |
-| GKT | graph, neural | 0.709 (one fold) | 0.545 | 0.043 |
-| Static IRT* | psychometric | 0.674 ± 0.003 | 0.553 | 0.082 |
+| **Optimized PFA** | logistic, temporal | **0.789 ± 0.006** | **0.390** | **0.467** |
+| BKT | probabilistic | 0.786 ± 0.007 | 0.393 | 0.637 |
+| PFA | logistic | 0.784 ± 0.006 | 0.392 | 0.471 |
+| GIRT | graph + IRT | 0.780 ± 0.006 | 0.395 | 0.484 |
+| Dynamic IRT | psychometric, dynamic | 0.740 ± 0.003 | 0.415 | 0.586 |
+| GKT | graph, neural | 0.709 (one fold) | 0.425 | 0.545 |
+| Static IRT* | psychometric | 0.674 ± 0.003 | 0.430 | 0.553 |
 
 \* Static IRT learns one ability per known student and is evaluated in a warm-start setting.
 GKT was trained on one fold only (owing to its long training time). Full tables in [`analysis/tables/`](analysis/tables/).
@@ -41,17 +41,16 @@ GKT was trained on one fold only (owing to its long training time). Full tables 
 **Main findings**
 
 - Simple logistic models with item difficulty and success / failure counts (PFA family) match
-  or beat more complex ones, and are by far the best calibrated.
-- BKT ranks answers well but is over-confident: its "mastery is never lost" assumption does not
-  hold on this data.
+  or beat more complex ones, and give the lowest log-loss.
+- BKT ranks answers well (high AUC) but has the worst log-loss: its "mastery is never lost"
+  assumption makes it over-confident on this data.
 - On graph models, the learned skill graph is almost as good as a uniform graph: propagation
   between skills matters, its precise topology much less.
 - Five extensions of the Optimized PFA all converge to the same AUC, which suggests a
   predictability ceiling around 0.79 on this dataset for this family of models.
 
 <p align="center">
-  <img src="docs/roc_all_models.png" width="45%">
-  <img src="docs/calibration_all_models.png" width="45%">
+  <img src="docs/roc_all_models.png" width="55%">
 </p>
 
 ---
@@ -90,7 +89,7 @@ held-out students.
   which mirrors the real use case (a new learner joins the platform).
 - Every model exports its **out-of-fold predictions** in one common format
   (`fold, y_true, y_pred, skill`). A single module, [`analysis/benchmark_utils.py`](analysis/benchmark_utils.py),
-  recomputes all metrics (AUC, PR-AUC, RMSE, Brier, log-loss, ECE) identically for every model
+  recomputes the three metrics (AUC, RMSE and log-loss) identically for every model
   and draws the comparison plots.
 
 ---

@@ -19,7 +19,7 @@ import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import (
-    accuracy_score, roc_auc_score, mean_squared_error, log_loss
+    roc_auc_score, mean_squared_error, log_loss
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -147,15 +147,13 @@ def split_features_target(df):
 
 # ---------- METRICS ----------
 def compute_metrics(model, X_test, y_test):
-    """AUC / RMSE / BCE (LogLoss) / Accuracy."""
+    """AUC / RMSE / BCE (LogLoss)."""
     y_prob = model.predict_proba(X_test)[:, 1]
-    y_pred = (y_prob >= 0.5).astype(int)
 
-    accuracy = accuracy_score(y_test, y_pred)
     auc      = roc_auc_score(y_test, y_prob)
     rmse     = math.sqrt(mean_squared_error(y_test, y_prob))    # RMSE on probabilities
     logloss  = log_loss(y_test, np.clip(y_prob, 1e-7, 1 - 1e-7))
-    return accuracy, auc, rmse, logloss
+    return auc, rmse, logloss
 
 
 # ---------- MAIN ----------
@@ -191,16 +189,14 @@ def main():
         model = LogisticRegression(max_iter=1000, solver="liblinear")
         model.fit(X_train, y_train)
 
-        accuracy, auc, rmse, logloss = compute_metrics(model, X_test, y_test)
-        print(f"  TEST | AUC {auc:.4f} | RMSE {rmse:.4f} | BCE {logloss:.4f} "
-              f"| Acc {accuracy:.4f}")
+        auc, rmse, logloss = compute_metrics(model, X_test, y_test)
+        print(f"  TEST | AUC {auc:.4f} | RMSE {rmse:.4f} | BCE {logloss:.4f}")
 
         results.append({
             "fold":     fi + 1,
             "auc":      auc,
             "rmse":     rmse,
             "bce":      logloss,
-            "accuracy": accuracy,
         })
 
     res = pd.DataFrame(results)
@@ -210,7 +206,6 @@ def main():
     print(f"  AUC      : {res['auc'].mean():.4f} ± {res['auc'].std():.4f}")
     print(f"  RMSE     : {res['rmse'].mean():.4f} ± {res['rmse'].std():.4f}")
     print(f"  BCE      : {res['bce'].mean():.4f} ± {res['bce'].std():.4f}")
-    print(f"  Accuracy : {res['accuracy'].mean():.4f} ± {res['accuracy'].std():.4f}")
 
     output_path = OUTPUT_DIR / "cv_results.csv"
     res.to_csv(output_path, index=False)

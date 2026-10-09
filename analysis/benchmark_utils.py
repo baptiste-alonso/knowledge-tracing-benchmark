@@ -8,7 +8,7 @@ Tracing models (BKT, IRT, dynamic IRT, PFA, Optimized PFA, GKT, GIRT).
 Guiding idea
 ------------
 Each model uses a different split, different data and a different set of metrics.
-To compare them on the same plot (ROC, PR, calibration) and in the same table,
+To compare them on the same plot (ROC) and in the same table,
 everything is reduced to a single common artifact:
 
     each model's out-of-fold (OOF) PREDICTIONS.
@@ -44,10 +44,7 @@ import pandas as pd
 from sklearn.metrics import (
     roc_auc_score,
     roc_curve,
-    precision_recall_curve,
-    average_precision_score,
     log_loss,
-    accuracy_score,
 )
 
 # --------------------------------------------------------------------------- #
@@ -175,33 +172,12 @@ def load_all_oof(keys=None) -> dict[str, pd.DataFrame]:
 # --------------------------------------------------------------------------- #
 
 
-def expected_calibration_error(y_true, y_pred, n_bins=10):
-    """Classic ECE (uniform binning over [0, 1])."""
-    y_true = np.asarray(y_true, dtype=float)
-    y_pred = np.asarray(y_pred, dtype=float)
-    bins = np.linspace(0.0, 1.0, n_bins + 1)
-    ece = 0.0
-    n = len(y_true)
-    for i in range(n_bins):
-        lo, hi = bins[i], bins[i + 1]
-        mask = (y_pred >= lo) & (y_pred < hi if i < n_bins - 1 else y_pred <= hi)
-        if mask.sum() > 0:
-            acc = y_true[mask].mean()
-            conf = y_pred[mask].mean()
-            ece += abs(acc - conf) * mask.sum() / n
-    return ece
-
-
 def compute_metrics(y_true, y_pred):
     """Metric set common to ALL models.
 
     AUC      : discrimination power (0.5 = random).
-    ACC      : accuracy at the 0.5 threshold.
     RMSE     : root mean squared error on the probabilities.
-    Brier    : = RMSE^2 (Brier score), kept for the KT literature.
     LogLoss  : cross-entropy (penalizes confident wrong predictions).
-    PR_AUC   : area under precision-recall (relevant for imbalanced classes).
-    ECE      : expected calibration error.
     """
     y_true = np.asarray(y_true, dtype=float)
     y_pred = np.clip(np.asarray(y_pred, dtype=float), 1e-7, 1 - 1e-7)
@@ -209,12 +185,8 @@ def compute_metrics(y_true, y_pred):
     single_class = len(np.unique(y_true)) < 2
     return {
         "AUC":     roc_auc_score(y_true, y_pred) if not single_class else np.nan,
-        "ACC":     accuracy_score(y_true, (y_pred >= 0.5).astype(int)),
         "RMSE":    float(np.sqrt(np.mean((y_true - y_pred) ** 2))),
-        "Brier":   float(np.mean((y_true - y_pred) ** 2)),
         "LogLoss": log_loss(y_true, y_pred, labels=[0, 1]),
-        "PR_AUC":  average_precision_score(y_true, y_pred) if not single_class else np.nan,
-        "ECE":     expected_calibration_error(y_true, y_pred),
     }
 
 
@@ -261,12 +233,9 @@ def per_skill_metric(oof: pd.DataFrame, metric="AUC", min_obs=30):
     return pd.DataFrame(rows)
 
 
-METRIC_ORDER = ["AUC", "PR_AUC", "ACC", "RMSE", "Brier", "LogLoss", "ECE"]
+METRIC_ORDER = ["AUC", "RMSE", "LogLoss"]
 # True = "higher is better"
-METRIC_HIGHER_IS_BETTER = {
-    "AUC": True, "PR_AUC": True, "ACC": True,
-    "RMSE": False, "Brier": False, "LogLoss": False, "ECE": False,
-}
+METRIC_HIGHER_IS_BETTER = {"AUC": True, "RMSE": False, "LogLoss": False}
 
 
 def per_fold_metrics(oof: pd.DataFrame) -> pd.DataFrame:
@@ -322,34 +291,13 @@ def build_comparison_table(oof_dict: dict[str, pd.DataFrame],
 
 
 # --------------------------------------------------------------------------- #
-#  Curves (computation): ROC, PR, calibration
+#  Curves (computation): ROC
 # --------------------------------------------------------------------------- #
 
 
 def roc_points(y_true, y_pred):
     fpr, tpr, _ = roc_curve(y_true, y_pred)
     return fpr, tpr
-
-
-def pr_points(y_true, y_pred):
-    precision, recall, _ = precision_recall_curve(y_true, y_pred)
-    return recall, precision
-
-
-def calibration_points(y_true, y_pred, n_bins=10):
-    """Return (mean confidence, empirical frequency, weight) per bin."""
-    y_true = np.asarray(y_true, dtype=float)
-    y_pred = np.asarray(y_pred, dtype=float)
-    bins = np.linspace(0.0, 1.0, n_bins + 1)
-    conf, freq, weight = [], [], []
-    for i in range(n_bins):
-        lo, hi = bins[i], bins[i + 1]
-        mask = (y_pred >= lo) & (y_pred < hi if i < n_bins - 1 else y_pred <= hi)
-        if mask.sum() > 0:
-            conf.append(y_pred[mask].mean())
-            freq.append(y_true[mask].mean())
-            weight.append(mask.sum())
-    return np.array(conf), np.array(freq), np.array(weight)
 
 
 # --------------------------------------------------------------------------- #
@@ -380,47 +328,6 @@ def plot_roc_all(oof_dict, ax=None, pooled=True):
     ax.set_title("ROC curves — all models")
     ax.legend(fontsize=8, loc="lower right")
     ax.set_xlim(0, 1); ax.set_ylim(0, 1.02)
-    return ax
-
-
-def plot_pr_all(oof_dict, ax=None):
-    """Overlaid precision-recall curves + baseline (positive rate)."""
-    ax = _ensure_ax(ax)
-    base = None
-    for key, oof in oof_dict.items():
-        spec = REGISTRY_BY_KEY[key]
-        ap = compute_metrics(oof["y_true"], oof["y_pred"])["PR_AUC"]
-        recall, precision = pr_points(oof["y_true"].values, oof["y_pred"].values)
-        ax.plot(recall, precision, color=spec.color, lw=2,
-                label=f"{spec.display_name} (PR-AUC={ap:.3f})")
-        base = oof["y_true"].mean()
-    if base is not None:
-        ax.axhline(base, ls="--", color="grey", lw=1,
-                   label=f"Base (positive rate={base:.3f})")
-    ax.set_xlabel("Recall")
-    ax.set_ylabel("Precision")
-    ax.set_title("Precision-Recall curves — all models")
-    ax.legend(fontsize=8, loc="lower left")
-    ax.set_xlim(0, 1); ax.set_ylim(0, 1.02)
-    return ax
-
-
-def plot_calibration_all(oof_dict, ax=None, n_bins=10):
-    """Overlaid reliability diagrams."""
-    ax = _ensure_ax(ax)
-    for key, oof in oof_dict.items():
-        spec = REGISTRY_BY_KEY[key]
-        ece = compute_metrics(oof["y_true"], oof["y_pred"])["ECE"]
-        conf, freq, _ = calibration_points(oof["y_true"].values,
-                                           oof["y_pred"].values, n_bins)
-        ax.plot(conf, freq, marker="o", ms=4, color=spec.color, lw=1.5,
-                label=f"{spec.display_name} (ECE={ece:.3f})")
-    ax.plot([0, 1], [0, 1], ls="--", color="grey", lw=1, label="Perfect calibration")
-    ax.set_xlabel("Predicted probability (confidence)")
-    ax.set_ylabel("Empirical success frequency")
-    ax.set_title("Calibration — all models")
-    ax.legend(fontsize=8, loc="upper left")
-    ax.set_xlim(0, 1); ax.set_ylim(0, 1)
     return ax
 
 
