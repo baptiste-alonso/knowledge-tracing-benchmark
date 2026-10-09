@@ -5,9 +5,12 @@ Which model best predicts whether a learner will answer the next question correc
 This repository benchmarks **seven interpretable knowledge-tracing models** on 110k real
 interactions from **Cleverlearn**, a French EdTech start-up, under one common evaluation
 protocol. It was carried out by a team of five students in the Artificial Intelligence project
-course at **CentraleSupélec** (March to June 2026).
+course at CentraleSupélec (March to June 2026).
 
-Beyond the scores, the analysis reads each model through its **pedagogical assumptions**
+Interpretability was a requirement of the client: every model had to keep readable parameters,
+which is why black-box models such as DKT were left out.
+
+Beyond the scores, the analysis reads each model through its pedagogical assumptions
 (does knowledge decay? does practice help? do skills interact?) and links the performance gaps
 to the assumptions that actually hold on this data.
 
@@ -33,18 +36,18 @@ to the assumptions that actually hold on this data.
 | Static IRT* | psychometric | 0.674 ± 0.003 | 0.553 | 0.082 |
 
 \* Static IRT learns one ability per known student and is evaluated in a warm-start setting.
-GKT was trained on one fold only (training time). Full tables in [`analysis/tables/`](analysis/tables/).
+GKT was trained on one fold only (owing to its long training time). Full tables in [`analysis/tables/`](analysis/tables/).
 
 **Main findings**
 
 - Simple logistic models with item difficulty and success / failure counts (PFA family) match
-  or beat more complex ones, and are by far the **best calibrated**.
+  or beat more complex ones, and are by far the best calibrated.
 - BKT ranks answers well but is over-confident: its "mastery is never lost" assumption does not
   hold on this data.
 - On graph models, the learned skill graph is almost as good as a uniform graph: propagation
   between skills matters, its precise topology much less.
 - Five extensions of the Optimized PFA all converge to the same AUC, which suggests a
-  **predictability ceiling around 0.79** on this dataset for this family of models.
+  predictability ceiling around 0.79 on this dataset for this family of models.
 
 <p align="center">
   <img src="docs/roc_all_models.png" width="45%">
@@ -69,11 +72,9 @@ GKT was trained on one fold only (training time). Full tables in [`analysis/tabl
 
 For student $i$ answering item $j$ of skill $k$ at time $t$:
 
-$$
-\operatorname{logit} P(\text{correct}) = a_j\big(\theta_{ik}(t) - b_j\big) + \beta \log \tau
-+ \gamma_k \log\big(1 + w^{+}_{ik}(t)\big) + \rho_k \log\big(1 + w^{-}_{ik}(t)\big)
-+ \delta \log\big(1 + \bar{\Delta}_{ik}(t)\big)
-$$
+```math
+\text{logit}\, P(\text{correct}) = a_j\,\big(\theta_{ik}(t) - b_j\big) + \beta \log \tau + \gamma_k \log\big(1 + w^{+}_{ik}(t)\big) + \rho_k \log\big(1 + w^{-}_{ik}(t)\big) + \delta \log\big(1 + \bar{\Delta}_{ik}(t)\big)
+```
 
 The ability $\theta_{ik}$ is updated after each answer with an ELO-like rule, past successes
 $w^{+}$ and failures $w^{-}$ are weighted by an exponential forgetting term, and $\bar{\Delta}$ is
@@ -91,14 +92,6 @@ held-out students.
   (`fold, y_true, y_pred, skill`). A single module, [`analysis/benchmark_utils.py`](analysis/benchmark_utils.py),
   recomputes all metrics (AUC, PR-AUC, RMSE, Brier, log-loss, ECE) identically for every model
   and draws the comparison plots.
-
-```mermaid
-flowchart LR
-    D[("cleaned_events.csv")] --> M["models/*<br/>training + 5-fold CV"]
-    M --> E["analysis/exporters<br/>out-of-fold predictions"]
-    E --> B["benchmark_utils.py<br/>shared metrics"]
-    B --> N["benchmark_analysis.ipynb<br/>tables + figures"]
-```
 
 ---
 
