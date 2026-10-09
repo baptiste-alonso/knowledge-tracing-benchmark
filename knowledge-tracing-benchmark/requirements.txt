@@ -1,0 +1,23 @@
+# --- Scientific core ---
+numpy>=1.23,<2.0
+pandas>=1.5.3
+scikit-learn>=1.2.2
+
+# --- IRT ---
+# NOTE: modern py-irt (>=0.4.10) only supports Python 3.9-3.11 (Requires-Python <3.12).
+# Use a Python 3.9-3.11 environment to run the static IRT model or install package with: pip install --ignore-requires-python "py-irt>=0.6,<0.8"
+torch>=2.0.1
+pyro-ppl>=1.8.0
+py-irt>=0.6.0,<0.8
+
+# --- Visualization ---
+matplotlib>=3.7
+seaborn==0.13.2
+networkx>=3.0
+
+# --- Utilities ---
+joblib>=1.2
+tqdm>=4.65
+
+# --- Tests ---
+pytest>=8.0,<9.0

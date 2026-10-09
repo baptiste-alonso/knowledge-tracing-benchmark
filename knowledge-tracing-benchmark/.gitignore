@@ -1,0 +1,27 @@
+# ---- Private data: never commit interaction logs or anything derived per student ----
+datas_management/*.csv
+datas_management/*.json
+**/oof_predictions.csv
+**/folds/
+models/gkt/data/*
+!models/gkt/data/.gitkeep
+models/gkt/saved_models/
+models/gkt/pykt-toolkit/data/
+models/irt/skills_json_cv/
+
+# ---- Python / tooling ----
+venv/
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.DS_Store
+
+# ---- LaTeX build files ----
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz

@@ -1,0 +1,376 @@
+\documentclass[12pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{lmodern}
+
+\title{\textbf{Bayesian Knowledge Tracing (BKT) - Version Complète}}
+\author{D'après Corbett \& Anderson (1994, 2005)}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\tableofcontents
+
+\newpage
+
+\section{Introduction}
+
+\subsection{Fondements théoriques}
+
+Ce document présente l'algorithme BKT complet tel que décrit dans les papiers fondateurs :
+\begin{itemize}
+    \item \textbf{Corbett, K. R., \& Anderson, J. R. (1994).} ``Knowledge Tracing: Modeling the Acquisition of Procedural Knowledge''
+    \item \textbf{Corbett, K. R., \& Anderson, J. R. (2005).} ``Knowledge Tracing: A Generalized Low-Order Markov Model for Representing Learning''
+\end{itemize}
+
+La principale différence avec les implémentations simplifiées :
+\begin{itemize}
+    \item Tous les 4 paramètres ($p_0, p_T, p_G, p_S$) sont estimés
+    \item Utilisation d'un algorithme EM complet avec forward-backward pass
+    \item Inférence probabiliste stricte sur les états cachés
+\end{itemize}
+
+\newpage
+
+\section{Modèle probabiliste}
+
+\subsection{Définition formelle}
+
+BKT est un \textbf{chaîne de Markov cachée} (Hidden Markov Model - HMM) à temps discret.
+
+\subsubsection{État caché}
+
+L'état de connaissance de l'étudiant à l'étape $t$ est une variable binaire :
+
+$$L_t \in \{0, 1\}$$
+
+où :
+\begin{itemize}
+    \item $L_t = 0$ : L'étudiant ne connaît pas la compétence
+    \item $L_t = 1$ : L'étudiant connaît la compétence
+\end{itemize}
+
+\subsubsection{Observation}
+
+La réponse observée à l'étape $t$ est :
+
+$$C_t \in \{0, 1\}$$
+
+où :
+\begin{itemize}
+    \item $C_t = 1$ : Réponse correcte
+    \item $C_t = 0$ : Réponse incorrecte
+\end{itemize}
+
+\subsection{Hypothèse d'indépendance conditionnelle}
+
+L'état futur dépend seulement de l'état présent (propriété de Markov) :
+
+$$P(L_{t+1} \mid L_1, L_2, \ldots, L_t) = P(L_{t+1} \mid L_t)$$
+
+\section{Les quatre paramètres}
+
+\subsection{1. Prior : $p_0$}
+
+$$p_0 = P(L_0 = 1)$$
+
+\textbf{Signification :} Probabilité a priori que l'étudiant connaisse la compétence avant toute tentative.
+
+\textbf{Plage typique :} $[0.1, 0.5]$
+
+\subsection{2. Learn (Transition) : $p_T$}
+
+$$p_T = P(L_{t+1} = 1 \mid L_t = 0)$$
+
+\textbf{Signification :} Probabilité que l'étudiant transite de l'état ne connaît pas vers connaît après une tentative.
+
+\textbf{Plage typique :} $[0.1, 0.3]$
+
+\subsection{3. Guess (Devinette) : $p_G$}
+
+$$p_G = P(C_t = 1 \mid L_t = 0)$$
+
+\textbf{Signification :} Probabilité d'une réponse correcte malgré l'absence de connaissance.
+
+\textbf{Plage typique :} $[0.05, 0.2]$
+
+\subsection{4. Slip (Glissement) : $p_S$}
+
+$$p_S = P(C_t = 0 \mid L_t = 1)$$
+
+\textbf{Signification :} Probabilité d'une réponse incorrecte malgré la connaissance.
+
+\textbf{Plage typique :} $[0.05, 0.2]$
+
+\section{Dynamique du modèle}
+
+\subsection{Transition d'état}
+
+La probabilité de transition entre états :
+
+$$P(L_{t+1} = 1 \mid L_t) = \begin{cases}
+        p_T & \text{si } L_t = 0 \\
+        1   & \text{si } L_t = 1
+    \end{cases}$$
+
+Ou de manière compacte :
+
+$$P(L_{t+1} = 1 \mid L_t) = L_t + (1-L_t)p_T$$
+
+\subsection{Observation générée}
+
+La probabilité d'observer une réponse donnée l'état :
+
+$$P(C_t = 1 \mid L_t) = \begin{cases}
+        p_G     & \text{si } L_t = 0 \\
+        1 - p_S & \text{si } L_t = 1
+    \end{cases}$$
+
+Ou de manière compacte :
+
+$$P(C_t = 1 \mid L_t) = L_t(1-p_S) + (1-L_t)p_G$$
+
+\newpage
+
+\section{Algorithme EM complet}
+
+\subsection{Vue d'ensemble}
+
+L'algorithme EM alterne entre :
+
+\begin{enumerate}
+    \item \textbf{E-step} : Calculer distribution a posteriori des états cachés
+    \item \textbf{M-step} : Réestimer les paramètres
+\end{enumerate}
+
+\subsection{E-STEP : Forward-Backward Pass}
+
+\subsubsection{Forward Pass}
+
+Pour chaque étudiant, calculer :
+
+$$\ell_t^{\text{fwd}} = P(L_t = 1 \mid C_{1:t})$$
+
+\textbf{Initialisation :}
+$$\ell_0^{\text{fwd}} = p_0$$
+
+\textbf{Prédiction avant observation :}
+
+$$\ell_t^{\text{pred}} = \ell_{t-1}^{\text{fwd}} + (1-\ell_{t-1}^{\text{fwd}})p_T$$
+
+\textbf{Prédiction de l'observation :}
+
+$$P(C_t = 1 \mid C_{1:t-1}) = \ell_t^{\text{pred}}(1-p_S) + (1-\ell_t^{\text{pred}})p_G$$
+
+\textbf{Mise à jour si } $C_t = 1$ :
+
+$$\ell_t^{\text{fwd}} = \frac{(1-p_S) \ell_t^{\text{pred}}}{\ell_t^{\text{pred}}(1-p_S) + (1-\ell_t^{\text{pred}})p_G}$$
+
+\textbf{Mise à jour si } $C_t = 0$ :
+
+$$\ell_t^{\text{fwd}} = \frac{p_S \ell_t^{\text{pred}}}{\ell_t^{\text{pred}} p_S + (1-\ell_t^{\text{pred}})(1-p_G)}$$
+
+\subsubsection{Backward Pass}
+
+Calculer la probabilité lissée :
+
+$$\ell_t^{\text{bwd}} = P(L_t = 1 \mid C_{1:T})$$
+
+\textbf{Initialisation :}
+
+$$\ell_T^{\text{bwd}} = \ell_T^{\text{fwd}}$$
+
+\textbf{Récurrence (pour } $t = T-1, \ldots, 0$) :
+
+$$\ell_t^{\text{bwd}} = \ell_t^{\text{fwd}} \cdot \frac{\ell_{t+1}^{\text{bwd}}}{\ell_t^{\text{pred}}} + (1-\ell_t^{\text{fwd}}) \cdot \frac{1-\ell_{t+1}^{\text{bwd}}}{1-\ell_t^{\text{pred}}}$$
+
+\section{M-STEP : Réestimation des paramètres}
+
+\subsection{Expected counts}
+
+Accumuler pendant E-step :
+
+$$\mathbb{E}[n_{L_t=0}] = \sum_{i,t} (1 - \ell_t^{\text{bwd}})$$
+
+$$\mathbb{E}[n_{L_t=1}] = \sum_{i,t} \ell_t^{\text{bwd}}$$
+
+Observations correctes sans connaissance :
+
+$$\mathbb{E}[n_{C_t=1, L_t=0}] = \sum_{i,t : C_t=1} (1-\ell_t^{\text{bwd}}) \cdot p_G$$
+
+Observations incorrectes avec connaissance :
+
+$$\mathbb{E}[n_{C_t=0, L_t=1}] = \sum_{i,t : C_t=0} \ell_t^{\text{bwd}} \cdot p_S$$
+
+\subsection{Formules de réestimation}
+
+\textbf{Prior :}
+
+$$p_0^{\text{new}} = \frac{1}{N} \sum_{i=1}^{N} \ell_0^{\text{bwd}, i}$$
+
+\textbf{Learn :}
+
+$$p_T^{\text{new}} = \frac{\text{Transitions apprises}}{\mathbb{E}[n_{L_t=0}]}$$
+
+\textbf{Guess :}
+
+$$p_G^{\text{new}} = \frac{\mathbb{E}[n_{C_t=1, L_t=0}]}{\mathbb{E}[n_{C_t=1, L_t=0}] + \mathbb{E}[n_{C_t=0, L_t=0}]}$$
+
+\textbf{Slip :}
+
+$$p_S^{\text{new}} = \frac{\mathbb{E}[n_{C_t=0, L_t=1}]}{\mathbb{E}[n_{C_t=1, L_t=1}] + \mathbb{E}[n_{C_t=0, L_t=1}]}$$
+
+\subsection{Clamping}
+
+$$p_i^{\text{new}} = \max(\min(p_i^{\text{new}}, 0.99), 0.01)$$
+
+\section{Critère de convergence}
+
+L'algorithme converge quand :
+
+$$\sum_{i \in \{p_0, p_T, p_G, p_S\}} |p_i^{\text{new}} - p_i^{\text{old}}| < 10^{-4}$$
+
+\newpage
+
+\section{Pseudocode de l'algorithme}
+
+\subsection{Entraînement EM}
+
+Pour chaque compétence $s$ :
+
+\begin{enumerate}
+    \item Initialiser : $p_0 = 0.3, p_T = 0.15, p_G = 0.1, p_S = 0.1$
+
+    \item Pour chaque itération $k$ :
+          \begin{enumerate}
+              \item \textbf{E-STEP}
+                    \begin{itemize}
+                        \item Pour chaque étudiant $i$ :
+                              \begin{itemize}
+                                  \item Forward pass : calculer $\ell_t^{\text{fwd}}$
+                                  \item Backward pass : calculer $\ell_t^{\text{bwd}}$
+                                  \item Accumuler expected counts
+                              \end{itemize}
+                    \end{itemize}
+
+              \item \textbf{M-STEP}
+                    \begin{itemize}
+                        \item Réestimer $p_0, p_T, p_G, p_S$
+                        \item Clamp à $[0.01, 0.99]$
+                    \end{itemize}
+
+              \item Vérifier convergence
+          \end{enumerate}
+
+    \item Stocker paramètres : $\text{params}[s] = [p_0, p_T, p_G, p_S]$
+\end{enumerate}
+
+\subsection{Prédiction}
+
+Pour chaque (étudiant, compétence) :
+
+\begin{enumerate}
+    \item $\ell_0 \leftarrow p_0$
+    \item Pour $t = 1 \ldots T$ :
+          \begin{enumerate}
+              \item $\ell_t^{\text{pred}} \leftarrow \ell_{t-1} + (1-\ell_{t-1})p_T$
+              \item $\text{prob} \leftarrow \ell_t^{\text{pred}}(1-p_S) + (1-\ell_t^{\text{pred}})p_G$
+              \item Stocker prédiction
+              \item Mettre à jour selon $C_t$
+          \end{enumerate}
+\end{enumerate}
+
+\section{Différences clés}
+
+\subsection{Forward-Backward vs Forward only}
+
+\begin{table}[ht]
+    \centering
+    \begin{tabular}{|l|c|c|}
+        \hline
+        \textbf{Aspect} & \textbf{Forward only} & \textbf{Forward-Backward} \\
+        \hline
+        Obs futures     & Non                   & Oui                       \\
+        Probabilités    & Filtrées              & Lissées                   \\
+        Précision EM    & Approx                & Exacte                    \\
+        Complexité      & $O(NT)$               & $O(NT)$                   \\
+        \hline
+    \end{tabular}
+\end{table}
+
+\section{Considérations pratiques}
+
+\subsection{Données}
+
+\begin{itemize}
+    \item Triées chronologiquement par étudiant
+    \item Groupées par compétence
+    \item Pas de valeurs manquantes
+\end{itemize}
+
+\subsection{Initialisation}
+
+\begin{itemize}
+    \item $p_0 = 0.3$
+    \item $p_T = 0.15$
+    \item $p_G = 0.1$
+    \item $p_S = 0.1$
+\end{itemize}
+
+\subsection{Itérations}
+
+\begin{itemize}
+    \item Petit dataset : 3-5 itérations
+    \item Dataset moyen : 5-10 itérations
+    \item Grand dataset : 10-20 itérations
+\end{itemize}
+
+\subsection{Stabilité}
+
+\begin{itemize}
+    \item Clamp : $p_i \in [0.01, 0.99]$
+    \item Epsilon : $\hat{C}_t = \max(\hat{C}_t, 10^{-10})$
+\end{itemize}
+
+\newpage
+
+\section{Exemple numérique}
+
+Étudiant avec 5 observations.
+
+Paramètres : $p_0=0.3, p_T=0.15, p_G=0.1, p_S=0.1$
+
+Observations : $C = [1, 1, 0, 1, 0]$
+
+\subsection{Forward Pass}
+
+\begin{align}
+    t=0: \quad \ell_0^{\text{fwd}}  & = 0.3                                       \\
+    t=1: \quad \ell_1^{\text{pred}} & = 0.405, \quad \ell_1^{\text{fwd}} = 0.870  \\
+    t=2: \quad \ell_2^{\text{pred}} & = 0.8895, \quad \ell_2^{\text{fwd}} = 0.985 \\
+    t=3: \quad \ell_3^{\text{pred}} & = 0.9873, \quad \ell_3^{\text{fwd}} = 0.878 \\
+    t=4: \quad \ell_4^{\text{pred}} & = 0.878, \quad \ell_4^{\text{fwd}} = 0.51
+\end{align}
+
+L'étudiant apprend rapidement (2 bonnes réponses), mais une mauvaise réponse crée de l'incertitude.
+
+\section{Conclusion}
+
+L'algorithme EM complet pour BKT :
+
+\begin{enumerate}
+    \item Estime les 4 paramètres
+    \item Forward-backward pour raffiner
+    \item Convergence vers maximum vraisemblance
+    \item Stable numériquement
+\end{enumerate}
+
+Approche rigoureuse des papiers fondateurs.
+
+\end{document}
